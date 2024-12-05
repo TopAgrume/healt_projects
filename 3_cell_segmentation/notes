@@ -1,0 +1,147 @@
+import torch
+from monai.networks.nets import UNETR, SwinUNETR
+from monai.metrics import DiceMetric
+from monai.losses import DiceCELoss
+from tqdm import tqdm
+import matplotlib.pyplot as plt
+
+# Improved model with SwinUNETR - a more modern architecture
+def create_swin_unetr():
+    return SwinUNETR(
+        img_size=(512, 512),
+        in_channels=3,
+        out_channels=1,
+        feature_size=24,
+        spatial_dims=2
+    )
+
+# Training function with validation and metrics tracking
+def train_model(model, train_loader, val_loader, loss_function, optimizer, device, num_epochs=30):
+    best_val_loss = float('inf')
+    train_losses = []
+    val_losses = []
+    dice_metric = DiceMetric(include_background=True, reduction="mean")
+    
+    for epoch in range(num_epochs):
+        # Training phase
+        model.train()
+        epoch_loss = 0
+        progress_bar = tqdm(train_loader, desc=f'Epoch {epoch + 1}/{num_epochs}')
+        
+        for batch_data in progress_bar:
+            inputs, labels = batch_data[0].to(device), batch_data[1].to(device)
+            optimizer.zero_grad()
+            outputs = model(inputs)
+            loss = loss_function(outputs, labels)
+            loss.backward()
+            optimizer.step()
+            
+            epoch_loss += loss.item()
+            progress_bar.set_postfix({'loss': loss.item()})
+            
+        avg_train_loss = epoch_loss / len(train_loader)
+        train_losses.append(avg_train_loss)
+        
+        # Validation phase
+        model.eval()
+        val_loss = 0
+        dice_scores = []
+        
+        with torch.no_grad():
+            for batch_data in val_loader:
+                inputs, labels = batch_data[0].to(device), batch_data[1].to(device)
+                outputs = model(inputs)
+                val_loss += loss_function(outputs, labels).item()
+                
+                # Calculate Dice score
+                dice_metric(outputs > 0.5, labels)
+                
+        avg_val_loss = val_loss / len(val_loader)
+        val_losses.append(avg_val_loss)
+        dice_score = dice_metric.aggregate().item()
+        dice_metric.reset()
+        
+        print(f'\nEpoch {epoch + 1}/{num_epochs}:')
+        print(f'Average Train Loss: {avg_train_loss:.4f}')
+        print(f'Average Val Loss: {avg_val_loss:.4f}')
+        print(f'Dice Score: {dice_score:.4f}')
+        
+        # Save best model
+        if avg_val_loss < best_val_loss:
+            best_val_loss = avg_val_loss
+            torch.save(model.state_dict(), 'best_model.pth')
+    
+    return train_losses, val_losses
+
+# Visualization function with better formatting
+def visualize_results(model, test_loader, device, num_samples=3):
+    model.eval()
+    fig, axes = plt.subplots(num_samples, 3, figsize=(15, 5*num_samples))
+    
+    with torch.no_grad():
+        for i, batch_data in enumerate(test_loader):
+            if i >= num_samples:
+                break
+                
+            inputs, labels = batch_data[0].to(device), batch_data[1].to(device)
+            predictions = model(inputs)
+            
+            # Display results
+            axes[i, 0].imshow(inputs[0, 0].cpu())
+            axes[i, 0].set_title('Input Image')
+            axes[i, 0].axis('off')
+            
+            axes[i, 1].imshow(labels[0, 0].cpu())
+            axes[i, 1].set_title('Ground Truth')
+            axes[i, 1].axis('off')
+            
+            axes[i, 2].imshow(predictions[0, 0].cpu() > 0.5)
+            axes[i, 2].set_title('Prediction')
+            axes[i, 2].axis('off')
+    
+    plt.tight_layout()
+    plt.show()
+
+# Usage example
+if __name__ == "__main__":
+    # Create models
+    unet_model = UNet(
+        spatial_dims=2,
+        in_channels=3,
+        out_channels=1,
+        channels=(16, 32, 64, 128, 256),
+        strides=(2, 2, 2, 2)
+    ).to(device)
+    
+    swin_model = create_swin_unetr().to(device)
+    
+    # Use improved loss function
+    loss_function = DiceCELoss(sigmoid=True)
+    
+    # Train both models
+    optimizer_unet = torch.optim.AdamW(unet_model.parameters(), lr=1e-4, weight_decay=1e-5)
+    optimizer_swin = torch.optim.AdamW(swin_model.parameters(), lr=1e-4, weight_decay=1e-5)
+    
+    # Train and compare models
+    unet_losses = train_model(unet_model, train_loader, test_loader, loss_function, 
+                            optimizer_unet, device)
+    swin_losses = train_model(swin_model, train_loader, test_loader, loss_function, 
+                             optimizer_swin, device)
+    
+    # Visualize results from both models
+    plt.figure(figsize=(12, 6))
+    plt.plot(unet_losses[0], label='UNet Train Loss')
+    plt.plot(unet_losses[1], label='UNet Val Loss')
+    plt.plot(swin_losses[0], label='Swin-UNETR Train Loss')
+    plt.plot(swin_losses[1], label='Swin-UNETR Val Loss')
+    plt.xlabel('Epoch')
+    plt.ylabel('Loss')
+    plt.title('Training and Validation Loss Comparison')
+    plt.legend()
+    plt.show()
+    
+    # Compare visual results
+    print("UNet Results:")
+    visualize_results(unet_model, test_loader, device)
+    print("\nSwin-UNETR Results:")
+    visualize_results(swin_model, test_loader, device)
