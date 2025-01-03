@@ -3,3 +3,5 @@ __MACOSX
 *.txt
 *.csv
 *.zip
+data/
+TNBC_NucleiSegmentation/
