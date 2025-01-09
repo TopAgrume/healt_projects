@@ -9,10 +9,14 @@ project/
 ```
 
 ### Bonus TP available here:
-```
+```sh
 TP_bonus/
 ├── 1_ecg_classification
 │   ├── Machine-learning-for-health-Classification-d-ECG_sequence.ipynb
-└── 4_Machine_learning_for_genomics
-    └── 4. classify_TF_binding.ipynb
+├── 4_Machine_learning_for_genomics
+│   └── 4. classify_TF_binding.ipynb
+
+# Only part of the notebook 6 is complete
+└── 6_Generating_molecules_for_drug_discovery
+    └── 6_Generating_molecules_for_drug_discovery.ipynb
 ```
