@@ -5,3 +5,4 @@ __MACOSX
 *.zip
 data/
 TNBC_NucleiSegmentation/
+Leveraging-VAE-to-generate-molecules/
